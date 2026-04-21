@@ -63,6 +63,20 @@ resource "aws_iam_role_policy" "secrets" {
   })
 }
 
+resource "aws_iam_role_policy" "dynamo_read" {
+  name = "${local.name}-dynamo-read"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "dynamodb:GetItem"
+      Resource = var.click_counts_table_arn
+    }]
+  })
+}
+
 ### [lambda function] ###
 resource "aws_lambda_function" "create" {
   function_name = local.name
@@ -82,10 +96,11 @@ resource "aws_lambda_function" "create" {
 
   environment {
     variables = {
-      DB_HOST       = var.db_host
-      DB_NAME       = var.db_name
-      DB_SECRET_ARN = var.db_secret_arn
-      BASE_URL      = var.base_url
+      DB_HOST               = var.db_host
+      DB_NAME               = var.db_name
+      DB_SECRET_ARN         = var.db_secret_arn
+      BASE_URL              = var.base_url
+      CLICK_COUNTS_TABLE    = var.click_counts_table_name
     }
   }
 
@@ -114,6 +129,18 @@ resource "aws_apigatewayv2_route" "create" {
 resource "aws_apigatewayv2_route" "options" {
   api_id    = aws_apigatewayv2_api.this.id
   route_key = "OPTIONS /create"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+}
+
+resource "aws_apigatewayv2_route" "stats" {
+  api_id    = aws_apigatewayv2_api.this.id
+  route_key = "GET /{code}/stats"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+}
+
+resource "aws_apigatewayv2_route" "options_stats" {
+  api_id    = aws_apigatewayv2_api.this.id
+  route_key = "OPTIONS /{code}/stats"
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 }
 

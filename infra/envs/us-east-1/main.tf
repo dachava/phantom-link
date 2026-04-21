@@ -48,14 +48,16 @@ module "iam" {
 module "lambda_create" {
   source = "../../modules/lambda-create"
 
-  env                = var.env
-  region             = var.aws_region
-  vpc_id             = module.vpc.vpc_id
-  private_subnet_ids = module.vpc.private_subnet_ids
-  db_host            = module.rds.proxy_endpoint
-  db_name            = module.rds.db_name
-  db_secret_arn      = module.rds.db_secret_arn
-  base_url           = var.base_url
+  env                     = var.env
+  region                  = var.aws_region
+  vpc_id                  = module.vpc.vpc_id
+  private_subnet_ids      = module.vpc.private_subnet_ids
+  db_host                 = module.rds.proxy_endpoint
+  db_name                 = module.rds.db_name
+  db_secret_arn           = module.rds.db_secret_arn
+  base_url                = var.base_url
+  click_counts_table_name = module.dynamodb.table_name
+  click_counts_table_arn  = module.dynamodb.table_arn
 }
 
 module "fargate" {

@@ -37,3 +37,13 @@ variable "base_url" {
   description = "Public base URL, e.g. https://ghostlink.lol"
   type        = string
 }
+
+variable "click_counts_table_name" {
+  description = "DynamoDB table name for click counts"
+  type        = string
+}
+
+variable "click_counts_table_arn" {
+  description = "DynamoDB table ARN for IAM policy"
+  type        = string
+}

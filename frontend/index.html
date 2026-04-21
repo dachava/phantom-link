@@ -40,7 +40,11 @@
     .ph-recent-label{font-size:10px;letter-spacing:2px;color:#2a2a2a;text-transform:uppercase;margin-bottom:12px}
     .ph-recent-item{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #111;font-size:12px}
     .ph-recent-code{color:#555;letter-spacing:1px}
-    .ph-recent-url{color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:280px;font-size:11px}
+    .ph-recent-url{color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px;font-size:11px}
+    .ph-recent-clicks{color:#3a3a3a;font-size:10px;letter-spacing:1px;cursor:pointer;transition:color .15s;white-space:nowrap}
+    .ph-recent-clicks:hover{color:#5f5}
+    .ph-stats{margin-top:12px;font-size:10px;letter-spacing:1px;color:#2a4a2a}
+    .ph-stats span{color:#5f5}
     @media(max-width:480px){
       .ph-name{font-size:26px;letter-spacing:4px}
       .ph-btn{padding:12px 14px;font-size:10px}
@@ -81,6 +85,7 @@
       <div class="ph-result-label">// link generated</div>
       <div class="ph-result-url" id="result-url" onclick="copyUrl()"></div>
       <div class="ph-copy-hint" id="copy-hint">click to copy</div>
+      <div class="ph-stats" id="result-stats"></div>
     </div>
 
     <div class="ph-error" id="error-box">
@@ -100,8 +105,9 @@
 </div>
 
 <script>
-  const API = '__API_ENDPOINT__';
-  const session = [];
+  const API      = '__API_ENDPOINT__';
+  const API_BASE = '__API_BASE_URL__';
+  const session  = [];
 
   async function shortenUrl() {
     const input = document.getElementById('url-input');
@@ -127,11 +133,13 @@
       if (!res.ok) throw new Error(data.error || 'request failed');
 
       const short = data.short_url;
+      const code  = short.split('/').pop();
       document.getElementById('result-url').textContent = short;
       document.getElementById('copy-hint').textContent = 'click to copy';
+      document.getElementById('result-stats').innerHTML = 'clicks: <span>0</span>';
       document.getElementById('result-box').classList.add('show');
 
-      session.unshift({code: short.split('/').pop(), url: url});
+      session.unshift({code, url, clicks: 0});
       renderSession();
       input.value = '';
     } catch(e) {
@@ -155,14 +163,28 @@
     });
   }
 
+  async function fetchStats(code, index) {
+    try {
+      const res  = await fetch(`${API_BASE}/${code}/stats`);
+      const data = await res.json();
+      if (!res.ok) return;
+      session[index].clicks = data.click_count;
+      renderSession();
+      if (index === 0) {
+        document.getElementById('result-stats').innerHTML = `clicks: <span>${data.click_count}</span>`;
+      }
+    } catch(e) {}
+  }
+
   function renderSession() {
     if (!session.length) return;
     document.getElementById('recent-section').style.display = 'block';
     const list = document.getElementById('recent-list');
-    list.innerHTML = session.slice(0,5).map(s =>
+    list.innerHTML = session.slice(0,5).map((s, i) =>
       `<div class="ph-recent-item">
         <span class="ph-recent-code">${s.code}</span>
         <span class="ph-recent-url">${s.url}</span>
+        <span class="ph-recent-clicks" onclick="fetchStats('${s.code}',${i})">${s.clicks} clicks ↻</span>
       </div>`
     ).join('');
   }

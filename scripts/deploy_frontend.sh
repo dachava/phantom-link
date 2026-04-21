@@ -11,12 +11,15 @@ TMP_DIR=$(mktemp -d)
 BUCKET=$(terraform -chdir="$TF_DIR" output -raw s3_site_bucket_name)
 DIST_ID=$(terraform -chdir="$TF_DIR" output -raw cloudfront_distribution_id)
 API_ENDPOINT=$(terraform -chdir="$TF_DIR" output -raw api_endpoint)
+API_BASE_URL=$(terraform -chdir="$TF_DIR" output -raw api_base_url)
 
-echo "[CONFIG] API endpoint: $API_ENDPOINT"
+echo "[CONFIG] API endpoint:  $API_ENDPOINT"
+echo "[CONFIG] API base URL:  $API_BASE_URL"
 
-### [build — inject api endpoint into a temp copy] ###
+### [build — inject api urls into a temp copy] ###
 cp -r "$FRONTEND_DIR/." "$TMP_DIR/"
 sed -i "s|__API_ENDPOINT__|$API_ENDPOINT|g" "$TMP_DIR/index.html"
+sed -i "s|__API_BASE_URL__|$API_BASE_URL|g" "$TMP_DIR/index.html"
 
 ### [sync to s3] ###
 echo "[SYNC] frontend/ → s3://$BUCKET"

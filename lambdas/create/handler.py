@@ -1,26 +1,22 @@
-# lambdas/create/handler.py
 import json
 import os
 import secrets
 import boto3
 import psycopg2
+from decimal import Decimal
 
 ### [module-level cache] ###
-# These live outside the handler so they survive across warm invocations...
-# warm calls skip the Secrets Manager API call and skip reconnecting to Postgres entirely
-# Without this, every request pays a ~100ms penalty
-# On cold start they're None; on the first real call populate them once
-_db_conn = None
-_db_creds = None
+_db_conn   = None
+_db_creds  = None
+_dynamo    = boto3.resource("dynamodb")
 
 CORS_HEADERS = {
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin":  "*",
     "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
 }
 
 def _get_creds():
-    """Pull DB credentials from Secrets Manager. Cached after first call."""
     global _db_creds
     if _db_creds:
         return _db_creds
@@ -30,7 +26,6 @@ def _get_creds():
     return _db_creds
 
 def _get_conn():
-    """Return a live psycopg2 connection. Reconnects if the connection dropped."""
     global _db_conn
     try:
         if _db_conn and not _db_conn.closed:
@@ -48,7 +43,6 @@ def _get_conn():
     return _db_conn
 
 def _ensure_table(conn):
-    """Create url_mappings if it doesn't exist yet. Safe to call every cold start."""
     with conn.cursor() as cur:
         cur.execute("""
             CREATE TABLE IF NOT EXISTS url_mappings (
@@ -59,46 +53,98 @@ def _ensure_table(conn):
         """)
     conn.commit()
 
-### [handler] ###
+### [route handlers] ###
+
+def handle_create(event):
+    body      = json.loads(event.get("body") or "{}")
+    long_url  = body.get("url", "").strip()
+
+    if not long_url:
+        return _error(400, "url is required")
+
+    short_code = secrets.token_urlsafe(6)[:8]
+    base_url   = os.environ["BASE_URL"]
+
+    conn = _get_conn()
+    _ensure_table(conn)
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO url_mappings (short_code, long_url) VALUES (%s, %s)",
+            (short_code, long_url),
+        )
+    conn.commit()
+
+    return _ok({"short_url": f"{base_url}/{short_code}"})
+
+
+def handle_stats(event):
+    short_code = (event.get("pathParameters") or {}).get("code", "").strip()
+
+    if not short_code:
+        return _error(400, "short_code is required")
+
+    ### [postgres — url + created_at] ###
+    conn = _get_conn()
+    _ensure_table(conn)
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT long_url, created_at FROM url_mappings WHERE short_code = %s",
+            (short_code,),
+        )
+        row = cur.fetchone()
+
+    if not row:
+        return _error(404, "short code not found")
+
+    long_url, created_at = row
+
+    ### [dynamodb — click count] ###
+    table  = _dynamo.Table(os.environ["CLICK_COUNTS_TABLE"])
+    result = table.get_item(Key={"short_code": short_code})
+    click_count = int(result.get("Item", {}).get("click_count", 0))
+
+    return _ok({
+        "short_code":  short_code,
+        "long_url":    long_url,
+        "click_count": click_count,
+        "created_at":  created_at.isoformat(),
+    })
+
+
+### [entry point] ###
+
 def handler(event, context):
-    method = event.get("requestContext", {}).get("http", {}).get("method", "")
+    method    = event.get("requestContext", {}).get("http", {}).get("method", "")
+    route_key = event.get("routeKey", "")
 
     if method == "OPTIONS":
         return {"statusCode": 200, "headers": CORS_HEADERS, "body": ""}
 
     try:
-        body = json.loads(event.get("body") or "{}")
-        long_url = body.get("url", "").strip()
-        if not long_url:
-            return {
-                "statusCode": 400,
-                "headers": {**CORS_HEADERS, "Content-Type": "application/json"},
-                "body": json.dumps({"error": "url is required"}),
-            }
-
-        short_code = secrets.token_urlsafe(6)[:8]
-        base_url   = os.environ["BASE_URL"]
-
-        conn = _get_conn()
-        _ensure_table(conn)
-
-        with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO url_mappings (short_code, long_url) VALUES (%s, %s)",
-                (short_code, long_url),
-            )
-        conn.commit()
-
-        return {
-            "statusCode": 200,
-            "headers": {**CORS_HEADERS, "Content-Type": "application/json"},
-            "body": json.dumps({"short_url": f"{base_url}/{short_code}"}),
-        }
+        if route_key == "POST /create":
+            return handle_create(event)
+        if route_key == "GET /{code}/stats":
+            return handle_stats(event)
+        return _error(404, "not found")
 
     except Exception as exc:
         print(f"ERROR: {exc}")
-        return {
-            "statusCode": 500,
-            "headers": {**CORS_HEADERS, "Content-Type": "application/json"},
-            "body": json.dumps({"error": "internal error"}),
-        }
+        return _error(500, "internal error")
+
+
+### [helpers] ###
+
+def _ok(data):
+    return {
+        "statusCode": 200,
+        "headers": {**CORS_HEADERS, "Content-Type": "application/json"},
+        "body": json.dumps(data, default=str),
+    }
+
+def _error(status, message):
+    return {
+        "statusCode": status,
+        "headers": {**CORS_HEADERS, "Content-Type": "application/json"},
+        "body": json.dumps({"error": message}),
+    }

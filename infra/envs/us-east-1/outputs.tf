@@ -56,6 +56,11 @@ output "api_endpoint" {
   value       = module.lambda_create.api_endpoint
 }
 
+output "api_base_url" {
+  description = "API Gateway base URL for constructing any route"
+  value       = module.lambda_create.api_base_url
+}
+
 output "function_name_create" {
   description = "Lambda function name for the deploy script"
   value       = module.lambda_create.function_name
