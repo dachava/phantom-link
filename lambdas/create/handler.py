@@ -1,20 +1,27 @@
 import json
 import os
 import secrets
+import time
 import boto3
 import psycopg2
 from decimal import Decimal
 
 ### [module-level cache] ###
-_db_conn   = None
-_db_creds  = None
-_dynamo    = boto3.resource("dynamodb")
+_db_conn    = None
+_db_creds   = None
+_dynamo     = boto3.resource("dynamodb")
+_cold_start = True
 
 CORS_HEADERS = {
     "Access-Control-Allow-Origin":  "*",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
 }
+
+### [structured logging] ###
+def log(level, **kwargs):
+    print(json.dumps({"level": level, **kwargs}), flush=True)
+
 
 def _get_creds():
     global _db_creds
@@ -55,9 +62,10 @@ def _ensure_table(conn):
 
 ### [route handlers] ###
 
-def handle_create(event):
-    body      = json.loads(event.get("body") or "{}")
-    long_url  = body.get("url", "").strip()
+def handle_create(event, cold_start):
+    start    = time.monotonic()
+    body     = json.loads(event.get("body") or "{}")
+    long_url = body.get("url", "").strip()
 
     if not long_url:
         return _error(400, "url is required")
@@ -75,16 +83,23 @@ def handle_create(event):
         )
     conn.commit()
 
+    log("INFO",
+        route="create",
+        short_code=short_code,
+        long_url=long_url,
+        duration_ms=_ms(start),
+        cold_start=cold_start,
+    )
     return _ok({"short_url": f"{base_url}/{short_code}"})
 
 
-def handle_stats(event):
+def handle_stats(event, cold_start):
+    start      = time.monotonic()
     short_code = (event.get("pathParameters") or {}).get("code", "").strip()
 
     if not short_code:
         return _error(400, "short_code is required")
 
-    ### [postgres — url + created_at] ###
     conn = _get_conn()
     _ensure_table(conn)
     with conn.cursor() as cur:
@@ -99,11 +114,17 @@ def handle_stats(event):
 
     long_url, created_at = row
 
-    ### [dynamodb — click count] ###
-    table  = _dynamo.Table(os.environ["CLICK_COUNTS_TABLE"])
-    result = table.get_item(Key={"short_code": short_code})
+    table       = _dynamo.Table(os.environ["CLICK_COUNTS_TABLE"])
+    result      = table.get_item(Key={"short_code": short_code})
     click_count = int(result.get("Item", {}).get("click_count", 0))
 
+    log("INFO",
+        route="stats",
+        short_code=short_code,
+        click_count=click_count,
+        duration_ms=_ms(start),
+        cold_start=cold_start,
+    )
     return _ok({
         "short_code":  short_code,
         "long_url":    long_url,
@@ -115,6 +136,10 @@ def handle_stats(event):
 ### [entry point] ###
 
 def handler(event, context):
+    global _cold_start
+    is_cold     = _cold_start
+    _cold_start = False
+
     method    = event.get("requestContext", {}).get("http", {}).get("method", "")
     route_key = event.get("routeKey", "")
 
@@ -123,17 +148,24 @@ def handler(event, context):
 
     try:
         if route_key == "POST /create":
-            return handle_create(event)
+            return handle_create(event, is_cold)
         if route_key == "GET /{code}/stats":
-            return handle_stats(event)
+            return handle_stats(event, is_cold)
         return _error(404, "not found")
 
     except Exception as exc:
-        print(f"ERROR: {exc}")
+        log("ERROR",
+            route=route_key,
+            error=str(exc),
+            cold_start=is_cold,
+        )
         return _error(500, "internal error")
 
 
 ### [helpers] ###
+
+def _ms(start):
+    return round((time.monotonic() - start) * 1000, 1)
 
 def _ok(data):
     return {
