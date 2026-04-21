@@ -76,7 +76,10 @@ resource "aws_cloudwatch_dashboard" "main" {
       ### [row 1 — lambda] ###
       {
         type   = "metric"
-        x = 0; y = 0; width = 8; height = 6
+        x      = 0
+        y      = 0
+        width  = 8
+        height = 6
         properties = {
           title   = "Lambda — Invocations"
           region  = "us-east-1"
@@ -87,7 +90,10 @@ resource "aws_cloudwatch_dashboard" "main" {
       },
       {
         type   = "metric"
-        x = 8; y = 0; width = 8; height = 6
+        x      = 8
+        y      = 0
+        width  = 8
+        height = 6
         properties = {
           title   = "Lambda — Errors"
           region  = "us-east-1"
@@ -101,7 +107,10 @@ resource "aws_cloudwatch_dashboard" "main" {
       },
       {
         type   = "metric"
-        x = 16; y = 0; width = 8; height = 6
+        x      = 16
+        y      = 0
+        width  = 8
+        height = 6
         properties = {
           title   = "Lambda — Duration p95 (ms)"
           region  = "us-east-1"
@@ -114,7 +123,10 @@ resource "aws_cloudwatch_dashboard" "main" {
       ### [row 2 — ecs] ###
       {
         type   = "metric"
-        x = 0; y = 6; width = 12; height = 6
+        x      = 0
+        y      = 6
+        width  = 12
+        height = 6
         properties = {
           title   = "ECS — CPU Utilization %"
           region  = "us-east-1"
@@ -129,7 +141,10 @@ resource "aws_cloudwatch_dashboard" "main" {
       },
       {
         type   = "metric"
-        x = 12; y = 6; width = 12; height = 6
+        x      = 12
+        y      = 6
+        width  = 12
+        height = 6
         properties = {
           title   = "ECS — Memory Utilization %"
           region  = "us-east-1"
@@ -146,7 +161,10 @@ resource "aws_cloudwatch_dashboard" "main" {
       ### [row 3 — rds + dynamodb + waf] ###
       {
         type   = "metric"
-        x = 0; y = 12; width = 8; height = 6
+        x      = 0
+        y      = 12
+        width  = 8
+        height = 6
         properties = {
           title   = "RDS — DB Connections"
           region  = "us-east-1"
@@ -157,7 +175,10 @@ resource "aws_cloudwatch_dashboard" "main" {
       },
       {
         type   = "metric"
-        x = 8; y = 12; width = 8; height = 6
+        x      = 8
+        y      = 12
+        width  = 8
+        height = 6
         properties = {
           title   = "DynamoDB — Consumed Read Units"
           region  = "us-east-1"
@@ -168,7 +189,10 @@ resource "aws_cloudwatch_dashboard" "main" {
       },
       {
         type   = "metric"
-        x = 16; y = 12; width = 8; height = 6
+        x      = 16
+        y      = 12
+        width  = 8
+        height = 6
         properties = {
           title   = "WAF — Blocked Requests"
           region  = "us-east-1"
