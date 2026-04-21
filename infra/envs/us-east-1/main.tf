@@ -92,6 +92,18 @@ module "dns" {
   domain_name = var.domain_name
 }
 
+module "monitoring" {
+  source = "../../modules/monitoring"
+
+  project              = var.project
+  environment          = var.env
+  lambda_function_name = module.lambda_create.function_name
+  ecs_cluster_name     = "phantom-link-redirect-${var.env}"
+  ecs_service_name     = "phantom-link-redirect-${var.env}"
+  rds_instance_id      = module.rds.db_instance_id
+  dynamodb_table_name  = module.dynamodb.table_name
+}
+
 module "cicd" {
   source = "../../modules/cicd"
 
@@ -109,4 +121,5 @@ module "frontend" {
   domain_name  = var.domain_name
   alb_dns_name = module.fargate.alb_dns_name
   zone_id      = module.dns.zone_id
+  web_acl_arn  = module.monitoring.web_acl_arn
 }

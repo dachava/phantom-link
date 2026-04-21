@@ -102,3 +102,9 @@ output "cicd_role_arn" {
   description = "Set this as AWS_ROLE_ARN in GitHub repo secrets."
   value       = module.cicd.cicd_role_arn
 }
+
+# Monitoring
+output "dashboard_name" {
+  description = "CloudWatch dashboard name"
+  value       = module.monitoring.dashboard_name
+}

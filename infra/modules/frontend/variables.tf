@@ -20,3 +20,8 @@ variable "zone_id" {
   type        = string
   description = "Route 53 hosted zone ID — managed by the dns module."
 }
+
+variable "web_acl_arn" {
+  type        = string
+  description = "WAF WebACL ARN to attach to the CloudFront distribution."
+}
