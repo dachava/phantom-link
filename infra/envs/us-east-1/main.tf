@@ -55,3 +55,19 @@ module "lambda_create" {
   db_secret_arn      = module.rds.db_secret_arn
   base_url           = var.base_url
 }
+
+module "fargate" {
+  source = "../../modules/fargate"
+
+  env                        = var.env
+  region                     = var.aws_region
+  vpc_id                     = module.vpc.vpc_id
+  private_subnet_ids         = module.vpc.private_subnet_ids
+  public_subnet_ids          = module.vpc.public_subnet_ids
+  db_host                    = module.rds.db_host
+  db_name                    = module.rds.db_name
+  db_secret_arn              = module.rds.db_secret_arn
+  click_events_bucket        = module.s3.bucket_name
+  fargate_task_role_arn      = module.iam.fargate_task_role_arn
+  fargate_execution_role_arn = module.iam.fargate_execution_role_arn
+}

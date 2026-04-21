@@ -60,3 +60,13 @@ output "function_name_create" {
   description = "Lambda function name for the deploy script"
   value       = module.lambda_create.function_name
 }
+
+output "alb_dns_name" {
+  description = "ALB DNS name for redirect test"
+  value       = module.fargate.alb_dns_name
+}
+
+output "ecr_repository_url" {
+  description = "ECR repo URL for push_image.sh"
+  value       = module.fargate.ecr_repository_url
+}
