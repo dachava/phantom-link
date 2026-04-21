@@ -1,0 +1,77 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.7"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      ### [infra] ###
+      - name: Terraform Init
+        run: terraform -chdir=infra/envs/us-east-1 init
+
+      - name: Terraform Apply
+        run: terraform -chdir=infra/envs/us-east-1 apply -auto-approve
+
+      ### [wait for rds proxy] ###
+      - name: Wait for RDS Proxy
+        run: |
+          echo "Waiting for RDS Proxy..."
+          for i in $(seq 1 36); do
+            STATUS=$(aws rds describe-db-proxies \
+              --db-proxy-name phantom-link-dev-proxy \
+              --region us-east-1 \
+              --query 'DBProxies[0].Status' \
+              --output text 2>/dev/null || echo "unavailable")
+            echo "  [$i/36] $STATUS"
+            [[ "$STATUS" == "available" ]] && echo "Proxy ready." && break
+            [[ $i -eq 36 ]] && echo "Timed out waiting for proxy." && exit 1
+            sleep 10
+          done
+
+      ### [fargate — build, push, deploy] ###
+      - name: Build and push redirect image
+        run: bash scripts/push_image.sh ${{ github.sha }}
+
+      - name: Force ECS deployment
+        run: |
+          aws ecs update-service \
+            --cluster phantom-link-redirect-dev \
+            --service phantom-link-redirect-dev \
+            --force-new-deployment \
+            --region us-east-1 > /dev/null
+          echo "Waiting for ECS service to stabilize..."
+          aws ecs wait services-stable \
+            --cluster phantom-link-redirect-dev \
+            --services phantom-link-redirect-dev \
+            --region us-east-1
+          echo "ECS service stable."
+
+      ### [lambda] ###
+      - name: Deploy Lambda
+        run: bash scripts/deploy_lambda_create.sh --full
+
+      ### [frontend] ###
+      - name: Deploy frontend
+        run: bash scripts/deploy_frontend.sh

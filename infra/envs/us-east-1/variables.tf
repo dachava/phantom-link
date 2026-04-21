@@ -44,3 +44,15 @@ variable "domain_name" {
   type        = string
   default     = "ghostlink.lol"
 }
+
+variable "github_org" {
+  description = "GitHub username or organization that owns this repo"
+  type        = string
+  default     = "dachava"
+}
+
+variable "github_repo" {
+  description = "GitHub repository name"
+  type        = string
+  default     = "phantom-link"
+}

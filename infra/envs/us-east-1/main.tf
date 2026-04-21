@@ -90,6 +90,15 @@ module "dns" {
   domain_name = var.domain_name
 }
 
+module "cicd" {
+  source = "../../modules/cicd"
+
+  project     = var.project
+  environment = var.env
+  github_org  = var.github_org
+  github_repo = var.github_repo
+}
+
 module "frontend" {
   source = "../../modules/frontend"
 

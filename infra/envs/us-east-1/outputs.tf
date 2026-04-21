@@ -91,3 +91,9 @@ output "route53_nameservers" {
   description = "Point your domain registrar to these nameservers."
   value       = module.dns.nameservers
 }
+
+# CI/CD
+output "cicd_role_arn" {
+  description = "Set this as AWS_ROLE_ARN in GitHub repo secrets."
+  value       = module.cicd.cicd_role_arn
+}
