@@ -35,6 +35,9 @@ dist/
 .DS_Store
 Thumbs.db
 
+# Docs (internal)
+docs/
+
 # IDE
 .idea/
 .vscode/

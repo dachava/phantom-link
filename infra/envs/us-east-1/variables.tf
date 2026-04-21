@@ -22,3 +22,13 @@ variable "az_count" {
   type    = number
   default = 2
 }
+
+variable "db_name" {
+  type    = string
+  default = "phantomlink"
+}
+
+variable "db_username" {
+  type    = string
+  default = "plinkadmin"
+}
