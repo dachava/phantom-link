@@ -32,3 +32,9 @@ variable "db_username" {
   type    = string
   default = "plinkadmin"
 }
+
+variable "base_url" {
+  description = "Public base URL returned in short links"
+  type        = string
+  default     = "https://phantom.link"
+}

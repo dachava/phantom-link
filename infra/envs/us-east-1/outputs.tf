@@ -31,7 +31,7 @@ output "db_endpoint" {
 }
 
 output "db_secret_arn" {
-  value = module.rds.secret_arn
+  value = module.rds.db_secret_arn
 }
 
 # IAM
@@ -49,4 +49,14 @@ output "lambda_create_role_arn" {
 
 output "lambda_processor_role_arn" {
   value = module.iam.lambda_processor_role_arn
+}
+
+output "api_endpoint" {
+  description = "POST /create invoke URL"
+  value       = module.lambda_create.api_endpoint
+}
+
+output "function_name_create" {
+  description = "Lambda function name for the deploy script"
+  value       = module.lambda_create.function_name
 }

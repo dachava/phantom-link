@@ -40,5 +40,18 @@ module "iam" {
   env                = var.env
   s3_bucket_arn      = module.s3.bucket_arn
   dynamodb_table_arn = module.dynamodb.table_arn
-  secret_arn         = module.rds.secret_arn
+  secret_arn         = module.rds.db_secret_arn
+}
+
+module "lambda_create" {
+  source = "../../modules/lambda-create"
+
+  env                = var.env
+  region             = var.aws_region
+  vpc_id             = module.vpc.vpc_id
+  private_subnet_ids = module.vpc.private_subnet_ids
+  db_host            = module.rds.db_host
+  db_name            = module.rds.db_name
+  db_secret_arn      = module.rds.db_secret_arn
+  base_url           = var.base_url
 }

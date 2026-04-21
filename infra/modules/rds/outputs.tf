@@ -1,3 +1,8 @@
+output "db_host" {
+  description = "RDS hostname only (no port)"
+  value       = aws_db_instance.this.address
+}
+
 output "db_endpoint" {
   value = aws_db_instance.this.endpoint
 }
@@ -10,7 +15,7 @@ output "db_name" {
   value = aws_db_instance.this.db_name
 }
 
-output "secret_arn" {
+output "db_secret_arn" {
   value = aws_secretsmanager_secret.db.arn
 }
 
