@@ -84,6 +84,12 @@ module "lambda_processor" {
   lambda_processor_role_arn = module.iam.lambda_processor_role_arn
 }
 
+module "dns" {
+  source = "../../modules/dns"
+
+  domain_name = var.domain_name
+}
+
 module "frontend" {
   source = "../../modules/frontend"
 
@@ -91,4 +97,5 @@ module "frontend" {
   environment  = var.env
   domain_name  = var.domain_name
   alb_dns_name = module.fargate.alb_dns_name
+  zone_id      = module.dns.zone_id
 }

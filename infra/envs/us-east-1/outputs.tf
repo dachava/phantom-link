@@ -89,5 +89,5 @@ output "s3_site_bucket_name" {
 
 output "route53_nameservers" {
   description = "Point your domain registrar to these nameservers."
-  value       = module.frontend.route53_nameservers
+  value       = module.dns.nameservers
 }

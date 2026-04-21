@@ -66,14 +66,6 @@ resource "aws_acm_certificate" "site" {
   tags = { Name = "${local.name_prefix}-cert" }
 }
 
-# ── Route 53 hosted zone ──────────────────────────────────────────────────────
-
-resource "aws_route53_zone" "site" {
-  name = var.domain_name
-
-  tags = { Name = var.domain_name }
-}
-
 # ── ACM DNS validation records ────────────────────────────────────────────────
 
 resource "aws_route53_record" "cert_validation" {
@@ -85,7 +77,7 @@ resource "aws_route53_record" "cert_validation" {
     }
   }
 
-  zone_id = aws_route53_zone.site.zone_id
+  zone_id = var.zone_id
   name    = each.value.name
   type    = each.value.type
   ttl     = 60
@@ -189,7 +181,7 @@ resource "aws_cloudfront_distribution" "site" {
 # ── Route 53 A alias → CloudFront ─────────────────────────────────────────────
 
 resource "aws_route53_record" "site" {
-  zone_id = aws_route53_zone.site.zone_id
+  zone_id = var.zone_id
   name    = var.domain_name
   type    = "A"
 

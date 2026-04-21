@@ -13,7 +13,3 @@ output "s3_bucket_name" {
   value       = aws_s3_bucket.site.bucket
 }
 
-output "route53_nameservers" {
-  description = "Nameservers to set at your domain registrar."
-  value       = aws_route53_zone.site.name_servers
-}
