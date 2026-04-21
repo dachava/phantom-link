@@ -36,5 +36,11 @@ variable "db_username" {
 variable "base_url" {
   description = "Public base URL returned in short links"
   type        = string
-  default     = "https://phantom.link"
+  default     = "https://ghostlink.lol"
+}
+
+variable "domain_name" {
+  description = "Apex domain for the CloudFront + S3 frontend"
+  type        = string
+  default     = "ghostlink.lol"
 }

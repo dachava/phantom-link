@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ghostlink.lol</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap');
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:#0a0a0a;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+    .ph-wrap{background:#0a0a0a;min-height:520px;width:100%;max-width:560px;padding:48px 24px 40px;font-family:'Share Tech Mono',monospace;color:#c8c8c8;display:flex;flex-direction:column;align-items:center}
+    .ph-logo{display:flex;flex-direction:column;align-items:center;margin-bottom:40px}
+    .ph-sigil{width:48px;height:48px;margin-bottom:12px}
+    .ph-name{font-family:'VT323',monospace;font-size:32px;letter-spacing:6px;color:#e8e8e8;text-transform:uppercase}
+    .ph-tag{font-size:11px;letter-spacing:3px;color:#444;text-transform:uppercase;margin-top:4px}
+    .ph-form{width:100%;max-width:520px}
+    .ph-label{font-size:11px;letter-spacing:2px;color:#444;text-transform:uppercase;margin-bottom:8px;display:block}
+    .ph-input-row{display:flex;gap:0;border:1px solid #222;background:#0f0f0f}
+    .ph-input{flex:1;background:transparent;border:none;outline:none;padding:12px 16px;font-family:'Share Tech Mono',monospace;font-size:13px;color:#c8c8c8;caret-color:#5f5}
+    .ph-input::placeholder{color:#333}
+    .ph-btn{background:transparent;border:none;border-left:1px solid #222;padding:12px 20px;font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:2px;color:#444;cursor:pointer;text-transform:uppercase;transition:color .15s,background .15s;white-space:nowrap}
+    .ph-btn:hover{color:#5f5;background:#0f1a0f}
+    .ph-btn:active{color:#3c3}
+    .ph-btn.loading{color:#333;pointer-events:none}
+    .ph-result{margin-top:24px;border:1px solid #1a2a1a;background:#0b120b;padding:16px;display:none}
+    .ph-result.show{display:block}
+    .ph-result-label{font-size:10px;letter-spacing:2px;color:#3c3;text-transform:uppercase;margin-bottom:8px}
+    .ph-result-url{font-size:14px;color:#7f7;word-break:break-all;cursor:pointer;transition:color .1s}
+    .ph-result-url:hover{color:#afffaf}
+    .ph-copy-hint{font-size:10px;color:#2a4a2a;margin-top:6px;letter-spacing:1px}
+    .ph-error{margin-top:24px;border:1px solid #2a1a1a;background:#120b0b;padding:16px;display:none}
+    .ph-error.show{display:block}
+    .ph-error-label{font-size:10px;letter-spacing:2px;color:#c33;text-transform:uppercase;margin-bottom:6px}
+    .ph-error-msg{font-size:12px;color:#633}
+    .ph-status{font-size:10px;letter-spacing:2px;color:#2a2a2a;margin-top:32px;text-align:center}
+    .ph-cursor{animation:blink 1s step-end infinite;color:#5f5}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+    .ph-divider{width:100%;max-width:520px;border:none;border-top:1px solid #161616;margin:32px 0}
+    .ph-recent{width:100%;max-width:520px}
+    .ph-recent-label{font-size:10px;letter-spacing:2px;color:#2a2a2a;text-transform:uppercase;margin-bottom:12px}
+    .ph-recent-item{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #111;font-size:12px}
+    .ph-recent-code{color:#555;letter-spacing:1px}
+    .ph-recent-url{color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:280px;font-size:11px}
+    @media(max-width:480px){
+      .ph-name{font-size:26px;letter-spacing:4px}
+      .ph-btn{padding:12px 14px;font-size:10px}
+      .ph-recent-url{max-width:160px}
+    }
+  </style>
+</head>
+<body>
+<div class="ph-wrap">
+  <div class="ph-logo">
+    <svg class="ph-sigil" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="1" y="1" width="46" height="46" stroke="#222" stroke-width="1"/>
+      <rect x="7" y="7" width="34" height="34" stroke="#2a2a2a" stroke-width="0.5"/>
+      <line x1="24" y1="7" x2="24" y2="41" stroke="#333" stroke-width="0.5"/>
+      <line x1="7" y1="24" x2="41" y2="24" stroke="#333" stroke-width="0.5"/>
+      <circle cx="24" cy="24" r="8" stroke="#3a3a3a" stroke-width="0.5" fill="none"/>
+      <circle cx="24" cy="24" r="2" fill="#5f5"/>
+      <line x1="24" y1="16" x2="24" y2="10" stroke="#5f5" stroke-width="1"/>
+      <line x1="32" y1="24" x2="38" y2="24" stroke="#404040" stroke-width="0.5"/>
+      <line x1="16" y1="24" x2="10" y2="24" stroke="#404040" stroke-width="0.5"/>
+      <line x1="29.6" y1="18.4" x2="33.5" y2="14.5" stroke="#2a2a2a" stroke-width="0.5"/>
+      <line x1="18.4" y1="18.4" x2="14.5" y2="14.5" stroke="#2a2a2a" stroke-width="0.5"/>
+      <line x1="29.6" y1="29.6" x2="33.5" y2="33.5" stroke="#2a2a2a" stroke-width="0.5"/>
+      <line x1="18.4" y1="29.6" x2="14.5" y2="33.5" stroke="#2a2a2a" stroke-width="0.5"/>
+    </svg>
+    <div class="ph-name">ghostlink.lol</div>
+    <div class="ph-tag">anonymous url shortener</div>
+  </div>
+
+  <div class="ph-form">
+    <label class="ph-label">// target url</label>
+    <div class="ph-input-row">
+      <input class="ph-input" id="url-input" type="text" placeholder="https://..." autocomplete="off" spellcheck="false"/>
+      <button class="ph-btn" id="shorten-btn" onclick="shortenUrl()">shorten_</button>
+    </div>
+
+    <div class="ph-result" id="result-box">
+      <div class="ph-result-label">// link generated</div>
+      <div class="ph-result-url" id="result-url" onclick="copyUrl()"></div>
+      <div class="ph-copy-hint" id="copy-hint">click to copy</div>
+    </div>
+
+    <div class="ph-error" id="error-box">
+      <div class="ph-error-label">// error</div>
+      <div class="ph-error-msg" id="error-msg"></div>
+    </div>
+  </div>
+
+  <hr class="ph-divider"/>
+
+  <div class="ph-recent" id="recent-section" style="display:none">
+    <div class="ph-recent-label">// session log</div>
+    <div id="recent-list"></div>
+  </div>
+
+  <div class="ph-status">sys:ready <span class="ph-cursor">_</span></div>
+</div>
+
+<script>
+  const API = 'https://nxnmvrwhi9.execute-api.us-east-1.amazonaws.com/create';
+  const session = [];
+
+  async function shortenUrl() {
+    const input = document.getElementById('url-input');
+    const btn = document.getElementById('shorten-btn');
+    const url = input.value.trim();
+
+    document.getElementById('result-box').classList.remove('show');
+    document.getElementById('error-box').classList.remove('show');
+
+    if (!url) { showError('no url provided'); return; }
+    if (!url.startsWith('http')) { showError('url must start with http:// or https://'); return; }
+
+    btn.textContent = 'routing_';
+    btn.classList.add('loading');
+
+    try {
+      const res = await fetch(API, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({url})
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'request failed');
+
+      const short = data.short_url;
+      document.getElementById('result-url').textContent = short;
+      document.getElementById('copy-hint').textContent = 'click to copy';
+      document.getElementById('result-box').classList.add('show');
+
+      session.unshift({code: short.split('/').pop(), url: url});
+      renderSession();
+      input.value = '';
+    } catch(e) {
+      showError(e.message);
+    } finally {
+      btn.textContent = 'shorten_';
+      btn.classList.remove('loading');
+    }
+  }
+
+  function showError(msg) {
+    document.getElementById('error-msg').textContent = msg;
+    document.getElementById('error-box').classList.add('show');
+  }
+
+  function copyUrl() {
+    const url = document.getElementById('result-url').textContent;
+    navigator.clipboard.writeText(url).then(() => {
+      document.getElementById('copy-hint').textContent = 'copied.';
+      setTimeout(() => document.getElementById('copy-hint').textContent = 'click to copy', 2000);
+    });
+  }
+
+  function renderSession() {
+    if (!session.length) return;
+    document.getElementById('recent-section').style.display = 'block';
+    const list = document.getElementById('recent-list');
+    list.innerHTML = session.slice(0,5).map(s =>
+      `<div class="ph-recent-item">
+        <span class="ph-recent-code">${s.code}</span>
+        <span class="ph-recent-url">${s.url}</span>
+      </div>`
+    ).join('');
+  }
+
+  document.getElementById('url-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') shortenUrl();
+  });
+</script>
+</body>
+</html>

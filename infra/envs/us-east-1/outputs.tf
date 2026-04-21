@@ -70,3 +70,24 @@ output "ecr_repository_url" {
   description = "ECR repo URL for push_image.sh"
   value       = module.fargate.ecr_repository_url
 }
+
+# Frontend
+output "cloudfront_url" {
+  description = "CloudFront HTTPS URL for the frontend."
+  value       = module.frontend.cloudfront_url
+}
+
+output "cloudfront_distribution_id" {
+  description = "Distribution ID for cache invalidations."
+  value       = module.frontend.cloudfront_distribution_id
+}
+
+output "s3_site_bucket_name" {
+  description = "S3 bucket that holds the static site."
+  value       = module.frontend.s3_bucket_name
+}
+
+output "route53_nameservers" {
+  description = "Point your domain registrar to these nameservers."
+  value       = module.frontend.route53_nameservers
+}

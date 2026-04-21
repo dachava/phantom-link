@@ -13,6 +13,12 @@ import psycopg2
 _db_conn = None
 _db_creds = None
 
+CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+}
+
 def _get_creds():
     """Pull DB credentials from Secrets Manager. Cached after first call."""
     global _db_creds
@@ -22,7 +28,6 @@ def _get_creds():
     secret = client.get_secret_value(SecretId=os.environ["DB_SECRET_ARN"])
     _db_creds = json.loads(secret["SecretString"])
     return _db_creds
-    # the handler never has a credential in its source code, they come from Terraform
 
 def _get_conn():
     """Return a live psycopg2 connection. Reconnects if the connection dropped."""
@@ -43,7 +48,6 @@ def _get_conn():
     return _db_conn
 
 def _ensure_table(conn):
-    # Idempotent
     """Create url_mappings if it doesn't exist yet. Safe to call every cold start."""
     with conn.cursor() as cur:
         cur.execute("""
@@ -57,14 +61,23 @@ def _ensure_table(conn):
 
 ### [handler] ###
 def handler(event, context):
+    method = event.get("requestContext", {}).get("http", {}).get("method", "")
+
+    if method == "OPTIONS":
+        return {"statusCode": 200, "headers": CORS_HEADERS, "body": ""}
+
     try:
         body = json.loads(event.get("body") or "{}")
         long_url = body.get("url", "").strip()
         if not long_url:
-            return {"statusCode": 400, "body": json.dumps({"error": "url is required"})}
+            return {
+                "statusCode": 400,
+                "headers": {**CORS_HEADERS, "Content-Type": "application/json"},
+                "body": json.dumps({"error": "url is required"}),
+            }
 
-        short_code = secrets.token_urlsafe(6)[:8]   # 8 URL-safe chars
-        base_url   = os.environ["BASE_URL"]          # e.g. https://phantom.link
+        short_code = secrets.token_urlsafe(6)[:8]
+        base_url   = os.environ["BASE_URL"]
 
         conn = _get_conn()
         _ensure_table(conn)
@@ -78,10 +91,14 @@ def handler(event, context):
 
         return {
             "statusCode": 200,
+            "headers": {**CORS_HEADERS, "Content-Type": "application/json"},
             "body": json.dumps({"short_url": f"{base_url}/{short_code}"}),
         }
 
     except Exception as exc:
-        # Don't leak internals... log and return a generic 500
         print(f"ERROR: {exc}")
-        return {"statusCode": 500, "body": json.dumps({"error": "internal error"})}
+        return {
+            "statusCode": 500,
+            "headers": {**CORS_HEADERS, "Content-Type": "application/json"},
+            "body": json.dumps({"error": "internal error"}),
+        }

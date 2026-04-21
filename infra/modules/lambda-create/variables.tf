@@ -34,6 +34,6 @@ variable "db_secret_arn" {
 }
 
 variable "base_url" {
-  description = "Public base URL, e.g. https://phantom.link"
+  description = "Public base URL, e.g. https://ghostlink.lol"
   type        = string
 }

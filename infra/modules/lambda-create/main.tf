@@ -111,6 +111,12 @@ resource "aws_apigatewayv2_route" "create" {
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 }
 
+resource "aws_apigatewayv2_route" "options" {
+  api_id    = aws_apigatewayv2_api.this.id
+  route_key = "OPTIONS /create"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+}
+
 resource "aws_apigatewayv2_stage" "default" {
   api_id      = aws_apigatewayv2_api.this.id
   name        = "$default"

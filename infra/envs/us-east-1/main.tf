@@ -83,3 +83,12 @@ module "lambda_processor" {
   click_counts_table_name   = module.dynamodb.table_name
   lambda_processor_role_arn = module.iam.lambda_processor_role_arn
 }
+
+module "frontend" {
+  source = "../../modules/frontend"
+
+  project      = var.project
+  environment  = var.env
+  domain_name  = var.domain_name
+  alb_dns_name = module.fargate.alb_dns_name
+}

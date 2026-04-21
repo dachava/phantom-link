@@ -1,43 +1,59 @@
-#!/usr/bin/env bash
-# run every time handler.py is changed
-# Terraform only manages the infrastructure, not the zip
+#!/bin/bash
+# deploy_lambda_create.sh
+#
+# Default  — re-zips handler.py with existing package/, pushes to Lambda
+# --full   — rebuilds deps via Docker (Amazon Linux), then zips and pushes
+#            Use this when requirements.txt changes
 
-# 1. Reads the function name from terraform output, no hardcoded names
-# 2. pip install --target package/ drops dependencies into a local folder
-# 3. Zips the deps folder first, then adds handler.py on top with -j (no directory prefix)
-# 4. update-function-code pushes the zip... this is the only AWS call
 set -euo pipefail
 
-### [config] ###
-FUNCTION_DIR="lambdas/create"
-ZIP_PATH="lambdas/create/lambda.zip"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$SCRIPT_DIR/.."
+FUNCTION_DIR="$ROOT/lambdas/create"
+ZIP="$FUNCTION_DIR/lambda.zip"
 REGION="${AWS_REGION:-us-east-1}"
+FULL=false
+
+for arg in "$@"; do [[ "$arg" == "--full" ]] && FULL=true; done
 
 ### [resolve function name from terraform output] ###
-FUNCTION_NAME=$(terraform -chdir=infra/envs/us-east-1 output -raw function_name_create 2>/dev/null)
-
+FUNCTION_NAME=$(terraform -chdir="$ROOT/infra/envs/us-east-1" output -raw function_name_create 2>/dev/null)
 if [[ -z "$FUNCTION_NAME" ]]; then
-  echo "ERROR: could not resolve function name from Terraform output"
+  echo "[ERROR] Could not resolve function name from Terraform output"
   exit 1
 fi
 
-### [install deps and zip] ###
-echo "→ Installing dependencies..."
-pip install -r "$FUNCTION_DIR/requirements.txt" \
-  --target "$FUNCTION_DIR/package" \
-  --quiet
+### [optionally rebuild deps with Docker — Amazon Linux compatible] ###
+if $FULL; then
+  echo "[DEPS] Rebuilding package/ via Docker..."
+  rm -rf "$FUNCTION_DIR/package"
+  mkdir -p "$FUNCTION_DIR/package"
+  docker run --rm \
+    --entrypoint pip \
+    -v "$FUNCTION_DIR/package:/var/task/package" \
+    public.ecr.aws/lambda/python:3.12 \
+    install -r /dev/stdin --target /var/task/package --quiet \
+    < "$FUNCTION_DIR/requirements.txt"
+  echo "[OK] Deps built"
+else
+  if [[ ! -d "$FUNCTION_DIR/package" ]]; then
+    echo "[ERROR] package/ not found — run with --full to build deps first"
+    exit 1
+  fi
+fi
 
-echo "→ Zipping..."
-cd "$FUNCTION_DIR/package" && zip -r "../lambda.zip" . -x "*.pyc" > /dev/null
-cd - > /dev/null
-zip -j "$ZIP_PATH" "$FUNCTION_DIR/handler.py" > /dev/null
+### [zip] ###
+echo "[ZIP] Building lambda.zip..."
+rm -f "$ZIP"
+cd "$FUNCTION_DIR/package" && zip -r "../lambda.zip" . -x "*.pyc" -x "__pycache__/*" > /dev/null
+cd "$FUNCTION_DIR" && zip -j lambda.zip handler.py > /dev/null
+echo "[OK] $(du -sh "$ZIP" | cut -f1) zipped"
 
-### [push to lambda] ###
-echo "→ Updating function code: $FUNCTION_NAME"
+### [deploy] ###
+echo "[DEPLOY] Pushing to $FUNCTION_NAME..."
 aws lambda update-function-code \
   --function-name "$FUNCTION_NAME" \
-  --zip-file "fileb://$ZIP_PATH" \
+  --zip-file "fileb://$ZIP" \
   --region "$REGION" \
-  --output json | python3 -c "import sys,json; d=json.load(sys.stdin); print('✓ deployed:', d['CodeSize'], 'bytes')"
-
-echo "Done."
+  --output json \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print('[OK]', d['CodeSize'], 'bytes deployed')"

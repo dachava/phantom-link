@@ -46,3 +46,6 @@ docs/
 # Lambdas
 lambdas/*/package/
 lambdas/**/*.zip
+
+# Frontend
+frontend/node_modules/

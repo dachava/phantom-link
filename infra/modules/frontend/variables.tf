@@ -1,0 +1,17 @@
+variable "project" {
+  type = string
+}
+
+variable "environment" {
+  type = string
+}
+
+variable "domain_name" {
+  type        = string
+  description = "Apex domain for the site, e.g. ghostlink.lol"
+}
+
+variable "alb_dns_name" {
+  type        = string
+  description = "ALB DNS name for the redirect service origin."
+}
