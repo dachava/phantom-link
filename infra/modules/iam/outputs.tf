@@ -13,3 +13,7 @@ output "lambda_create_role_arn" {
 output "lambda_processor_role_arn" {
   value = aws_iam_role.lambda_processor.arn
 }
+
+output "lambda_processor_role_name" {
+  value = aws_iam_role.lambda_processor.name
+}

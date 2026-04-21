@@ -108,3 +108,9 @@ output "dashboard_name" {
   description = "CloudWatch dashboard name"
   value       = module.monitoring.dashboard_name
 }
+
+# DLQ
+output "dlq_url" {
+  description = "Processor DLQ URL — inspect failed click events"
+  value       = module.lambda_processor.dlq_url
+}

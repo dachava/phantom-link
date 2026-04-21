@@ -33,6 +33,41 @@ resource "aws_lambda_permission" "s3" {
 }
 
 
+### [dead-letter queue — catches events that fail all retries] ###
+resource "aws_sqs_queue" "dlq" {
+  name                      = "${local.name}-dlq"
+  message_retention_seconds = 1209600 # 14 days — max retention before messages expire
+
+  tags = { Name = "${local.name}-dlq" }
+}
+
+### [allow lambda to send failed events to the dlq] ###
+resource "aws_iam_role_policy" "dlq_send" {
+  name = "${local.name}-dlq-send"
+  role = var.lambda_processor_role_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "sqs:SendMessage"
+      Resource = aws_sqs_queue.dlq.arn
+    }]
+  })
+}
+
+### [async invoke config — explicit retries + on_failure destination] ###
+resource "aws_lambda_function_event_invoke_config" "processor" {
+  function_name          = aws_lambda_function.processor.function_name
+  maximum_retry_attempts = 2
+
+  destination_config {
+    on_failure {
+      destination = aws_sqs_queue.dlq.arn
+    }
+  }
+}
+
 # the notification only fires for objects under clicks/ ending in .json
 resource "aws_s3_bucket_notification" "click_events" {
   bucket = var.click_events_bucket_name

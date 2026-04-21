@@ -79,11 +79,12 @@ module "fargate" {
 module "lambda_processor" {
   source = "../../modules/lambda-processor"
 
-  env                       = var.env
-  click_events_bucket_arn   = module.s3.bucket_arn
-  click_events_bucket_name  = module.s3.bucket_name
-  click_counts_table_name   = module.dynamodb.table_name
-  lambda_processor_role_arn = module.iam.lambda_processor_role_arn
+  env                        = var.env
+  click_events_bucket_arn    = module.s3.bucket_arn
+  click_events_bucket_name   = module.s3.bucket_name
+  click_counts_table_name    = module.dynamodb.table_name
+  lambda_processor_role_arn  = module.iam.lambda_processor_role_arn
+  lambda_processor_role_name = module.iam.lambda_processor_role_name
 }
 
 module "dns" {

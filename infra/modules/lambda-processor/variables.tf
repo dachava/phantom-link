@@ -22,3 +22,8 @@ variable "lambda_processor_role_arn" {
   description = "IAM role ARN for the processor Lambda (from IAM module)"
   type        = string
 }
+
+variable "lambda_processor_role_name" {
+  description = "IAM role name for the processor Lambda — needed to attach inline policies"
+  type        = string
+}
