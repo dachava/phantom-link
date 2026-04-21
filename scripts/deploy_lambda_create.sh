@@ -34,6 +34,8 @@ if $FULL; then
     public.ecr.aws/lambda/python:3.12 \
     install -r /dev/stdin --target /var/task/package --quiet \
     < "$FUNCTION_DIR/requirements.txt"
+  # docker writes files as root on linux — fix ownership so zip can read them
+  sudo chown -R "$(id -u):$(id -g)" "$FUNCTION_DIR/package" 2>/dev/null || true
   echo "[OK] Deps built"
 else
   if [[ ! -d "$FUNCTION_DIR/package" ]]; then
