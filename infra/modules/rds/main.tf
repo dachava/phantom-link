@@ -3,7 +3,7 @@ locals {
   secret_name = "${local.name_prefix}-db-credentials"
 }
 
-# ── Random password ───────────────────────────────────────────────────────────
+### [random password] ###
 
 resource "random_password" "db" {
   length           = 32
@@ -11,7 +11,7 @@ resource "random_password" "db" {
   override_special = "!#$%&*()-_=+[]{}:?"
 }
 
-# ── Secrets Manager ───────────────────────────────────────────────────────────
+### [secrets manager] ###
 
 resource "aws_secretsmanager_secret" "db" {
   name                    = local.secret_name
@@ -30,7 +30,7 @@ resource "aws_secretsmanager_secret_version" "db" {
   })
 }
 
-# ── Security group ────────────────────────────────────────────────────────────
+### [rds security group] ###
 
 resource "aws_security_group" "rds" {
   name        = "${local.name_prefix}-rds-sg"
@@ -54,7 +54,7 @@ resource "aws_security_group" "rds" {
   tags = { Name = "${local.name_prefix}-rds-sg" }
 }
 
-# ── Subnet group ─────────────────────────────────────────────────────────────
+### [subnet group] ###
 
 resource "aws_db_subnet_group" "this" {
   name       = "${local.name_prefix}-db-subnet-group"
@@ -63,7 +63,97 @@ resource "aws_db_subnet_group" "this" {
   tags = { Name = "${local.name_prefix}-db-subnet-group" }
 }
 
-# ── RDS instance ──────────────────────────────────────────────────────────────
+### [rds proxy iam role] ###
+
+resource "aws_iam_role" "rds_proxy" {
+  name = "${local.name_prefix}-rds-proxy"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "rds.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "rds_proxy_secrets" {
+  name = "read-db-secret"
+  role = aws_iam_role.rds_proxy.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["secretsmanager:GetSecretValue"]
+      Resource = [aws_secretsmanager_secret.db.arn]
+    }]
+  })
+}
+
+### [rds proxy security group] ###
+
+resource "aws_security_group" "rds_proxy" {
+  name        = "${local.name_prefix}-rds-proxy-sg"
+  description = "Allow Postgres inbound from VPC, outbound to RDS"
+  vpc_id      = var.vpc_id
+
+  ingress {
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
+  egress {
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.rds.id]
+  }
+
+  tags = { Name = "${local.name_prefix}-rds-proxy-sg" }
+}
+
+### [rds proxy] ###
+
+resource "aws_db_proxy" "this" {
+  name                   = "${local.name_prefix}-proxy"
+  engine_family          = "POSTGRESQL"
+  role_arn               = aws_iam_role.rds_proxy.arn
+  vpc_subnet_ids         = var.private_subnet_ids
+  vpc_security_group_ids = [aws_security_group.rds_proxy.id]
+  require_tls            = false
+  idle_client_timeout    = 1800
+
+  auth {
+    auth_scheme = "SECRETS"
+    secret_arn  = aws_secretsmanager_secret.db.arn
+    iam_auth    = "DISABLED"
+  }
+
+  tags = { Name = "${local.name_prefix}-proxy" }
+
+  depends_on = [aws_db_instance.this]
+}
+
+resource "aws_db_proxy_default_target_group" "this" {
+  db_proxy_name = aws_db_proxy.this.name
+
+  connection_pool_config {
+    max_connections_percent      = 100
+    max_idle_connections_percent = 50
+  }
+}
+
+resource "aws_db_proxy_target" "this" {
+  db_proxy_name          = aws_db_proxy.this.name
+  target_group_name      = aws_db_proxy_default_target_group.this.name
+  db_instance_identifier = aws_db_instance.this.identifier
+}
+
+### [rds instance] ###
 
 resource "aws_db_instance" "this" {
   identifier        = "${local.name_prefix}-postgres"

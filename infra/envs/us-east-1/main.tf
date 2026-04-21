@@ -52,7 +52,7 @@ module "lambda_create" {
   region             = var.aws_region
   vpc_id             = module.vpc.vpc_id
   private_subnet_ids = module.vpc.private_subnet_ids
-  db_host            = module.rds.db_host
+  db_host            = module.rds.proxy_endpoint
   db_name            = module.rds.db_name
   db_secret_arn      = module.rds.db_secret_arn
   base_url           = var.base_url
@@ -66,7 +66,7 @@ module "fargate" {
   vpc_id                     = module.vpc.vpc_id
   private_subnet_ids         = module.vpc.private_subnet_ids
   public_subnet_ids          = module.vpc.public_subnet_ids
-  db_host                    = module.rds.db_host
+  db_host                    = module.rds.proxy_endpoint
   db_name                    = module.rds.db_name
   db_secret_arn              = module.rds.db_secret_arn
   click_events_bucket        = module.s3.bucket_name

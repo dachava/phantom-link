@@ -1,6 +1,11 @@
 output "db_host" {
-  description = "RDS hostname only (no port)"
+  description = "RDS hostname only (no port) — use proxy_endpoint instead for Lambda and Fargate."
   value       = aws_db_instance.this.address
+}
+
+output "proxy_endpoint" {
+  description = "RDS Proxy endpoint — use this as DB_HOST for Lambda and Fargate."
+  value       = aws_db_proxy.this.endpoint
 }
 
 output "db_endpoint" {

@@ -46,6 +46,24 @@ resource "aws_s3_bucket_policy" "site" {
 
 # ── CloudFront OAC ────────────────────────────────────────────────────────────
 
+### [cloudfront function — rewrite / to /index.html] ###
+
+resource "aws_cloudfront_function" "rewrite_root" {
+  name    = "${local.name_prefix}-rewrite-root"
+  runtime = "cloudfront-js-2.0"
+  publish = true
+
+  code = <<-EOT
+    async function handler(event) {
+      var request = event.request;
+      if (request.uri === '/') {
+        request.uri = '/index.html';
+      }
+      return request;
+    }
+  EOT
+}
+
 resource "aws_cloudfront_origin_access_control" "site" {
   name                              = "${local.name_prefix}-oac"
   origin_access_control_origin_type = "s3"
@@ -157,6 +175,11 @@ resource "aws_cloudfront_distribution" "site" {
     viewer_protocol_policy = "redirect-to-https"
     allowed_methods        = ["GET", "HEAD"]
     cached_methods         = ["GET", "HEAD"]
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.rewrite_root.arn
+    }
     compress               = true
 
     forwarded_values {
