@@ -45,4 +45,4 @@ docs/
 
 # Lambdas
 lambdas/*/package/
-lambdas/*.zip
+lambdas/**/*.zip

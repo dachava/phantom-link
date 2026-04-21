@@ -2,7 +2,7 @@ locals {
   name_prefix = "${var.project}-${var.env}"
 }
 
-# ── Trust policies ────────────────────────────────────────────────────────────
+### Trust policies ###
 
 data "aws_iam_policy_document" "ecs_trust" {
   statement {
@@ -24,7 +24,7 @@ data "aws_iam_policy_document" "lambda_trust" {
   }
 }
 
-# ── Fargate task execution role ───────────────────────────────────────────────
+### Fargate task execution role ###
 # Grants ECS agent permission to pull images and write logs
 
 resource "aws_iam_role" "fargate_execution" {
@@ -51,7 +51,7 @@ resource "aws_iam_role_policy" "fargate_execution_secrets" {
   })
 }
 
-# ── Fargate task role ─────────────────────────────────────────────────────────
+### Fargate task role ###
 # Granted to the application code running inside the container
 
 resource "aws_iam_role" "fargate_task" {
@@ -80,7 +80,7 @@ resource "aws_iam_role_policy" "fargate_task_policy" {
   })
 }
 
-# ── Lambda-create role ────────────────────────────────────────────────────────
+### [Lambda-create role] ###
 # Needs VPC access (ENI) + Secrets Manager to read DB credentials
 
 resource "aws_iam_role" "lambda_create" {
@@ -107,7 +107,7 @@ resource "aws_iam_role_policy" "lambda_create_secrets" {
   })
 }
 
-# ── Lambda-processor role ─────────────────────────────────────────────────────
+### [Lambda-processor role] ###
 # Reads click JSON from S3, increments count in DynamoDB
 
 resource "aws_iam_role" "lambda_processor" {
@@ -127,16 +127,19 @@ resource "aws_iam_role_policy" "lambda_processor_policy" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      {
-        Effect   = "Allow"
-        Action   = ["s3:GetObject"]
-        Resource = "${var.s3_bucket_arn}/clicks/*"
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["dynamodb:UpdateItem"]
-        Resource = [var.dynamodb_table_arn]
-      }
+  {
+    Effect   = "Allow"
+    Action   = ["s3:GetObject", "s3:ListBucket"]
+    Resource = [
+      "${var.click_events_bucket_arn}",
+      "${var.click_events_bucket_arn}/clicks/*"
     ]
+  },
+  {
+    Effect   = "Allow"
+    Action   = ["dynamodb:UpdateItem"]
+    Resource = var.click_counts_table_arn
+  }
+]
   })
 }
