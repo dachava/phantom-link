@@ -107,7 +107,7 @@
 <script>
   const API      = '__API_ENDPOINT__';
   const API_BASE = '__API_BASE_URL__';
-  const session  = [];
+  const session  = JSON.parse(localStorage.getItem('pl_session') || '[]');
 
   async function shortenUrl() {
     const input = document.getElementById('url-input');
@@ -140,6 +140,7 @@
       document.getElementById('result-box').classList.add('show');
 
       session.unshift({code, url, clicks: 0});
+      saveSession();
       renderSession();
       input.value = '';
     } catch(e) {
@@ -169,11 +170,16 @@
       const data = await res.json();
       if (!res.ok) return;
       session[index].clicks = data.click_count;
+      saveSession();
       renderSession();
       if (index === 0) {
         document.getElementById('result-stats').innerHTML = `clicks: <span>${data.click_count}</span>`;
       }
     } catch(e) {}
+  }
+
+  function saveSession() {
+    localStorage.setItem('pl_session', JSON.stringify(session.slice(0, 5)));
   }
 
   function renderSession() {
@@ -192,6 +198,12 @@
   document.getElementById('url-input').addEventListener('keydown', e => {
     if (e.key === 'Enter') shortenUrl();
   });
+
+  // restore session on load and refresh all click counts
+  if (session.length) {
+    renderSession();
+    session.forEach((s, i) => fetchStats(s.code, i));
+  }
 </script>
 </body>
 </html>
