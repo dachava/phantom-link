@@ -17,9 +17,14 @@ Browser
   |                         Lambda (Python 3.12)
   |                                |
   |                                v
-  |                         RDS Postgres (private subnet)
+  |                         RDS Proxy --> RDS Postgres
   |
-  |-- GET /{code} ---------> CloudFront
+  |-- GET /{code}/stats ----> API Gateway HTTP API
+  |                                |
+  |                                v
+  |                         Lambda --> Postgres + DynamoDB
+  |
+  |-- GET /{code} ----------> CloudFront --> WAF WebACL
                                    |
                           .--------+--------.
                           |                 |
@@ -34,7 +39,7 @@ Browser
                               .------------+------------.
                               |                         |
                               v                         v
-                        RDS Postgres             S3 click event
+                        RDS Proxy                S3 click event
                         (lookup)               clicks/{code}/{ts}.json
                               |                         |
                               v                         v
@@ -43,32 +48,38 @@ Browser
                                                         v
                                                  Lambda (processor)
                                                         |
-                                                        v
-                                                 DynamoDB UpdateItem
-                                              (atomic click increment)
+                                            .-----------+-----------.
+                                            |                       |
+                                            v                       v
+                                     DynamoDB UpdateItem       SQS DLQ
+                                  (atomic click increment)  (on retry exhaustion)
 ```
 
 ### Write path
 
-`POST /create` hits API Gateway, which proxies to a Python Lambda. The Lambda fetches database credentials from Secrets Manager (cached across warm invocations), generates an 8-character URL-safe code via `secrets.token_urlsafe`, and inserts the mapping into RDS Postgres. Returns `{"short_url": "https://ghostlink.lol/{code}"}`.
+`POST /create` hits API Gateway, which proxies to a Python Lambda. The Lambda fetches credentials from Secrets Manager (cached across warm invocations), generates an 8-character code via `secrets.token_urlsafe`, and inserts the mapping into RDS Postgres via the RDS Proxy. Returns `{"short_url": "https://ghostlink.lol/{code}"}`.
 
 ### Read path
 
-`GET /{code}` resolves through CloudFront to the Application Load Balancer. A FastAPI app running on ECS Fargate looks up the short code in RDS, writes a click event JSON object to S3, and returns a 302 redirect to the original URL.
+`GET /{code}` resolves through CloudFront (WAF-protected) to the ALB. A FastAPI app on ECS Fargate looks up the code in Postgres via the RDS Proxy, writes a click event JSON to S3, and returns a 302 redirect.
+
+### Stats endpoint
+
+`GET /{code}/stats` returns the original URL, creation timestamp, and live click count by joining Postgres and DynamoDB in the create Lambda.
 
 ### Click processor
 
-S3 event notifications on the `clicks/` prefix trigger a Lambda. It reads the click JSON, parses the short code, and performs an atomic `ADD` increment on the `click_count` attribute in DynamoDB. At-least-once delivery; concurrent increments are safe.
+S3 event notifications on `clicks/` trigger a processor Lambda. It parses the click JSON and performs an atomic `ADD` on the `click_count` attribute in DynamoDB. On retry exhaustion, the failed event is forwarded to an SQS dead-letter queue for recovery.
 
 ### Frontend
 
-A single-file static SPA served from S3 via CloudFront. Calls the API Gateway endpoint directly from the browser.
+A single-file static SPA served from S3 via CloudFront. Shows click counts per generated link with inline refresh. Session log persists across page refreshes via `localStorage`.
 
 ---
 
 ## Infrastructure
 
-All infrastructure is defined in Terraform. No hardcoded ARNs or account IDs.
+All infrastructure is Terraform. No hardcoded ARNs or account IDs.
 
 ```
 infra/
@@ -76,12 +87,15 @@ infra/
     vpc/              VPC, subnets, IGW, NAT gateway, route tables
     s3/               Click-events bucket
     dynamodb/         click_counts table
-    rds/              Postgres 15, db.t3.micro, Secrets Manager credentials
+    rds/              Postgres 15, db.t3.micro, RDS Proxy, Secrets Manager
     iam/              Roles for Fargate, Lambda-create, Lambda-processor
-    lambda-create/    Lambda function + API Gateway HTTP API
-    lambda-processor/ S3-triggered Lambda + DynamoDB permission
-    fargate/          ECR, ECS cluster, task definition, service, ALB
+    lambda-create/    Lambda + API Gateway HTTP API (create + stats routes)
+    lambda-processor/ S3-triggered Lambda + SQS DLQ
+    fargate/          ECR, ECS cluster, task definition, ALB
     frontend/         S3 site bucket, CloudFront, ACM cert, Route 53
+    dns/              Persistent Route 53 zone (prevent_destroy)
+    monitoring/       WAF WebACL, CloudWatch dashboard
+    cicd/             GitHub OIDC provider, CI/CD IAM role
   envs/
     us-east-1/        Root module — wires all modules together
 ```
@@ -92,100 +106,74 @@ infra/
 |---|---|
 | S3 bucket | `phantom-link-tfstate` |
 | DynamoDB lock table | `phantom-link-tfstate-lock` |
-| Region | `us-east-1` |
 
 ### Key design decisions
 
 | Decision | Reason |
 |---|---|
-| Fargate for redirect, Lambda for create | Redirect needs persistent DB connections and low p99 latency. Lambda suits the stateless, infrequent write path. |
-| Secrets Manager over env vars | Credentials never appear in Terraform state or ECS task definitions. Supports rotation. |
-| DynamoDB ADD for click counts | Atomic server-side increment. No read-modify-write race condition under concurrent load. |
-| S3 event notifications for click pipeline | Decouples the redirect service from the counter. Redirect path has no dependency on DynamoDB. |
-| CloudFront path-based routing | Single domain serves both the SPA and short-link redirects. `/` to S3, `/*` to ALB. |
-| Single NAT gateway | Cost trade-off for a dev deployment. One NAT serves all private subnets. |
-| PAY_PER_REQUEST on DynamoDB | Click traffic is bursty. No capacity planning, scales instantly. |
+| Fargate for redirect, Lambda for create | Redirect needs persistent connections and low p99. Lambda suits the stateless write path. |
+| RDS Proxy | Lambda cold starts open new Postgres connections. The proxy pools ~80 connections and multiplexes thousands of Lambda invocations across them. |
+| Secrets Manager | Credentials never appear in Terraform state or task definitions. Cached at the module level to avoid per-invocation API calls. |
+| DynamoDB ADD for click counts | Atomic server-side increment — no read-modify-write race under concurrent load. |
+| S3 event pipeline for clicks | Decouples the redirect path from the counter. A slow DynamoDB write never blocks a redirect. |
+| SQS DLQ on processor | Failed click events are captured for recovery rather than silently dropped after retries. |
+| CloudFront path-based routing | Single domain for SPA and short-link redirects. `/` to S3, `/*` to ALB. |
+| WAF rate limiting | Blocks IPs exceeding 2000 req/5 min at the CloudFront edge. AWS managed rules (OWASP Top 10) run in count mode. |
+| DNS `prevent_destroy` | Route 53 nameservers are permanent for the lifetime of a zone. Protecting the zone means the registrar only needs to be updated once. |
+| GitHub Actions + OIDC | No long-lived AWS credentials in CI. Short-lived tokens scoped to this repo via trust policy. |
+| Structured JSON logging | Every log line is a queryable JSON record in CloudWatch Logs Insights. |
 
 ---
 
-## Prerequisites
+## CI/CD
 
-- AWS CLI configured with appropriate credentials
-- Terraform >= 1.7
-- Docker (for building Lambda dependency packages)
-- A domain with nameservers pointing to the Route 53 hosted zone
+Two GitHub Actions workflows:
+
+- **`ci.yml`** — runs on every PR: `terraform fmt`, validate, plan. Plan output posted as a PR comment.
+- **`cd.yml`** — runs on every push to `main`: `terraform apply` → push ECR image → force ECS deploy → deploy Lambda → deploy frontend.
+
+Authentication uses OIDC — no AWS access keys stored in GitHub secrets.
 
 ---
 
 ## Deployment
 
-### 1. Bootstrap remote state
-
-Run once per AWS account before the first `terraform apply`.
+### First-time setup
 
 ```bash
+# bootstrap remote state backend
 bash scripts/initialize_aws.sh
+
+# apply all infrastructure
+terraform -chdir=infra/envs/us-east-1 init
+terraform -chdir=infra/envs/us-east-1 apply
+
+# get the CI/CD role ARN and add it to GitHub secrets as AWS_ROLE_ARN
+terraform -chdir=infra/envs/us-east-1 output cicd_role_arn
 ```
 
-This creates the S3 state bucket and DynamoDB lock table.
+Point your domain registrar at the `route53_nameservers` output. After DNS propagation, push to `main` — the pipeline handles everything else.
 
-### 2. Apply infrastructure
-
-```bash
-cd infra/envs/us-east-1
-terraform init
-terraform apply
-```
-
-On first apply, note the `route53_nameservers` output and point your domain registrar at those nameservers. Wait for DNS propagation before proceeding.
-
-### 3. Build and push the redirect service image
+### Manual deploy (without CI)
 
 ```bash
 bash scripts/push_image.sh
-```
-
-Then force a new ECS deployment:
-
-```bash
-aws ecs update-service \
-  --cluster phantom-link-redirect-dev \
-  --service phantom-link-redirect-dev \
-  --force-new-deployment \
-  --region us-east-1 | cat
-```
-
-### 4. Deploy the Lambda create handler
-
-First deploy (builds psycopg2 via Docker for Amazon Linux compatibility):
-
-```bash
 bash scripts/deploy_lambda_create.sh --full
-```
-
-Subsequent deploys (handler changes only):
-
-```bash
-bash scripts/deploy_lambda_create.sh
-```
-
-### 5. Deploy the frontend
-
-```bash
 bash scripts/deploy_frontend.sh
 ```
 
-Syncs `frontend/` to S3 and invalidates the CloudFront cache.
+### Teardown
+
+```bash
+bash scripts/teardown.sh          # preserve Route 53 zone
+bash scripts/teardown.sh --full   # full wipe including DNS
+```
 
 ---
 
 ## Usage
 
-### Shorten a URL via the UI
-
-Visit [ghostlink.lol](https://ghostlink.lol), paste a URL, and click **shorten_**.
-
-### Shorten a URL via the API
+### Shorten a URL
 
 ```bash
 curl -X POST https://ghostlink.lol/create \
@@ -193,19 +181,18 @@ curl -X POST https://ghostlink.lol/create \
   -d '{"url": "https://example.com"}'
 ```
 
-Response:
-
 ```json
 {"short_url": "https://ghostlink.lol/AetqWRgn"}
 ```
 
-### Check click count
+### Get stats
 
 ```bash
-aws dynamodb get-item \
-  --table-name phantom-link-dev-click-counts \
-  --key '{"short_code": {"S": "AetqWRgn"}}' \
-  --region us-east-1
+curl https://ghostlink.lol/AetqWRgn/stats
+```
+
+```json
+{"short_code": "AetqWRgn", "long_url": "https://example.com", "click_count": 4, "created_at": "2025-04-21T14:00:00+00:00"}
 ```
 
 ---
@@ -217,21 +204,21 @@ phantom-link/
 ├── frontend/
 │   └── index.html              Static SPA
 ├── infra/
-│   ├── modules/                Reusable Terraform modules
+│   ├── modules/                Terraform modules
 │   └── envs/us-east-1/         Environment root module
 ├── lambdas/
-│   ├── create/                 POST /create handler
+│   ├── create/                 POST /create + GET /{code}/stats
 │   └── processor/              S3 click event processor
 ├── services/
 │   └── redirect/               FastAPI redirect service (Fargate)
-│       ├── app.py
-│       ├── Dockerfile
-│       └── requirements.txt
-└── scripts/
-    ├── initialize_aws.sh       One-time state backend bootstrap
-    ├── deploy_lambda_create.sh Lambda build and deploy
-    ├── deploy_frontend.sh      S3 sync and CloudFront invalidation
-    └── push_image.sh           ECR image build and push
+├── scripts/
+│   ├── initialize_aws.sh       One-time state backend bootstrap
+│   ├── deploy_lambda_create.sh Lambda build and deploy
+│   ├── deploy_frontend.sh      S3 sync and CloudFront invalidation
+│   ├── push_image.sh           ECR image build and push
+│   └── teardown.sh             Ordered infrastructure teardown
+└── docs/
+    └── phase_*.md              Per-phase build notes and decisions
 ```
 
 ---
@@ -241,13 +228,16 @@ phantom-link/
 | Layer | Technology |
 |---|---|
 | Infrastructure | Terraform >= 1.7, AWS provider ~> 5.0 |
+| CI/CD | GitHub Actions + AWS OIDC |
 | Runtime | Python 3.12 |
-| Database | RDS Postgres 15, db.t3.micro |
+| Database | RDS Postgres 15, db.t3.micro + RDS Proxy |
 | Compute | AWS Lambda, ECS Fargate |
 | API | API Gateway HTTP API (v2) |
-| CDN | CloudFront (PriceClass_100) |
+| CDN / Security | CloudFront, WAF (rate limit + managed rules) |
 | DNS | Route 53 |
-| Storage | S3, DynamoDB |
+| Storage | S3, DynamoDB (PAY_PER_REQUEST) |
 | Secrets | AWS Secrets Manager |
+| Messaging | SQS (DLQ) |
+| Observability | CloudWatch Logs (structured JSON), CloudWatch Dashboard |
 | Container registry | Amazon ECR |
 | Networking | VPC, ALB, NAT Gateway |
