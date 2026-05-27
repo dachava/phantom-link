@@ -1,0 +1,41 @@
+# phantom-link — Cursor agent conventions
+# ghostlink.lol | AWS serverless URL shortener
+
+## Repo layout
+- IaC lives in infra/. Modules are in infra/modules/, instantiated in infra/envs/us-east-1/.
+- Lambda handlers live in lambdas/create/ and lambdas/processor/. Packaging output in lambdas/*/package/.
+- Frontend assets in frontend/. Service code in services/redirect/.
+- Scripts (bash) in scripts/.
+
+## Terraform rules
+- Match the existing module structure exactly. Each module in infra/modules/ has its own main.tf,
+  variables.tf, and outputs.tf — do not collapse these into a single file.
+- Variables must have type and description. No bare variable blocks.
+- All resources must include the tags variable if it exists in that module. Never hardcode tag values.
+- Never hardcode ARNs, account IDs, region strings, or resource names. Use variables or data sources.
+- Never rename an existing resource without explicitly flagging it — a rename is a destroy+recreate
+  in Terraform. Call this out clearly before proposing it.
+- After any module change, note which infra/envs/us-east-1/ instantiation is affected.
+- Provider version constraints live in the env, not in modules. Do not add required_providers
+  blocks to modules unless one already exists there.
+
+## Python rules (Lambdas)
+- Handlers are in lambdas/create/ and lambdas/processor/. Match existing logging and error-handling
+  patterns in those files — read them before writing new code.
+- Use structured logging (JSON) if that's what exists. Do not switch logging style.
+- Environment variables come from Lambda config, never from hardcoded defaults in handler code.
+- If writing tests, use pytest. Mock AWS calls with moto. Do not invent boto3 call signatures —
+  check the actual calls in the handler first.
+
+## Bash rules
+- All scripts use set -euo pipefail at the top. No exceptions.
+- Scripts target Linux/Debian. Do not use macOS-specific flags (e.g. sed -i '' is wrong here).
+
+## Agent behaviour
+- Read the relevant existing file(s) before proposing changes to them. Do not guess at variable
+  names, resource names, or module interfaces — they are in the files.
+- If a value (ARN, name, CIDR, etc.) is not visible in the files you have read, say so and ask.
+  Never fabricate a plausible-looking value.
+- When proposing a Terraform change, state which resources will be created, modified, or destroyed.
+  If you cannot determine this without a plan, say so.
+- Show a plan before making multi-file edits. One sentence per file: what changes and why.
