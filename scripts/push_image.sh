@@ -22,4 +22,10 @@ docker build \
 echo "→ Pushing $ECR_URL:$IMAGE_TAG"
 docker push "$ECR_URL:$IMAGE_TAG"
 
+### [also tag as latest so ECS task definition always resolves] ###
+if [[ "$IMAGE_TAG" != "latest" ]]; then
+  docker tag "$ECR_URL:$IMAGE_TAG" "$ECR_URL:latest"
+  docker push "$ECR_URL:latest"
+fi
+
 echo "Done."
